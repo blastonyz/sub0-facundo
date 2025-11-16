@@ -63,38 +63,24 @@ async def deploy_escrow(
             )
         
         # Prepare milestones
-        milestone_percentages = [25, 25, 25, 25]  # 4 equal phases
-        milestone_descriptions = [
-            "Phase 1: Initial Setup and Planning",
-            "Phase 2: Development and Testing",
-            "Phase 3: Integration and Optimization",
-            "Phase 4: Final Delivery and Handover"
-        ]
+        milestone_count = 4
+        total_amount = int(project.budget * 10**12)  # Convert to smallest unit (planck)
         
-        # In production, load actual WASM from compiled artifact
-        # For now, placeholder
-        contract_wasm = b""  # Would be: open("target/ink/funding_escrow.wasm", "rb").read()
-        contract_metadata = {}  # Would be: json.load(open("target/ink/funding_escrow.contract", "r"))
-        
-        # Deploy the contract
-        contract_address = await deployer.deploy_contract(
-            contract_wasm=contract_wasm,
-            contract_metadata=contract_metadata,
-            keypair=None,  # In production, load from secure storage
-            constructor_args={
-                "project_owner": project.project_id,
-                "milestone_count": len(milestone_percentages)
-            }
+        # Deploy the contract using real WASM and metadata
+        deployment_result = await deployer.deploy_contract(
+            project_owner=project.project_id,
+            milestone_count=milestone_count,
+            total_amount=total_amount,
+            keypair_uri=None,  # In production, load from secure storage
         )
         
-        if not contract_address:
+        if not deployment_result:
             raise HTTPException(
                 status_code=500,
                 detail="Failed to deploy contract to Rococo"
             )
         
-        # Update project with contract address
-        project.contract_address = contract_address
+        contract_address = deployment_result.get("contract_address")
         project.status = "approved"  # Keep as approved since contract is deployed
         await db.commit()
         
@@ -102,7 +88,7 @@ async def deploy_escrow(
             "success": True,
             "project_id": project_id,
             "contract_address": contract_address,
-            "milestones": len(milestone_percentages),
+            "milestones": milestone_count,
             "message": f"Escrow contract {'re-launched' if is_relaunch else 'deployed'} successfully"
         }
         
