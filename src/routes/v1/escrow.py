@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from src.core.depends.db import get_async_session
 from src.models.sponsor import SponsoredProject
+from src.services.rococo_deployer import RococoDeployer
 
 router = APIRouter(prefix="/escrow", tags=["escrow"])
 
@@ -51,15 +52,17 @@ async def deploy_escrow(
         # This allows relaunching if the previous one failed
         is_relaunch = bool(project.contract_address)
         
-        # TODO: In production, this would:
-        # 1. Connect to Rococo Contracts testnet via substrate-interface
-        # 2. Deploy the funding-escrow contract from WASM
-        # 3. Call create_escrow() with milestones
-        # 4. Return the contract address
+        # Deploy to Rococo Testnet
+        deployer = RococoDeployer()
         
-        # For now, simulate the deployment
-        # In a real implementation, use polkadot-js or substrate SDK
+        # Connect to Rococo
+        if not await deployer.connect():
+            raise HTTPException(
+                status_code=503,
+                detail="Could not connect to Rococo testnet. Try again later."
+            )
         
+        # Prepare milestones
         milestone_percentages = [25, 25, 25, 25]  # 4 equal phases
         milestone_descriptions = [
             "Phase 1: Initial Setup and Planning",
@@ -68,17 +71,27 @@ async def deploy_escrow(
             "Phase 4: Final Delivery and Handover"
         ]
         
-        # TODO: Actual contract deployment would happen here
-        # contract_address = await deploy_to_rococo(
-        #     project_id=project.project_id,
-        #     project_name=project.name,
-        #     budget=project.budget,
-        #     milestones=milestone_percentages,
-        #     descriptions=milestone_descriptions
-        # )
+        # In production, load actual WASM from compiled artifact
+        # For now, placeholder
+        contract_wasm = b""  # Would be: open("target/ink/funding_escrow.wasm", "rb").read()
+        contract_metadata = {}  # Would be: json.load(open("target/ink/funding_escrow.contract", "r"))
         
-        # Placeholder contract address (in production, this comes from blockchain)
-        contract_address = f"5{project.project_id[:40]}"  # Simulated address
+        # Deploy the contract
+        contract_address = await deployer.deploy_contract(
+            contract_wasm=contract_wasm,
+            contract_metadata=contract_metadata,
+            keypair=None,  # In production, load from secure storage
+            constructor_args={
+                "project_owner": project.project_id,
+                "milestone_count": len(milestone_percentages)
+            }
+        )
+        
+        if not contract_address:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to deploy contract to Rococo"
+            )
         
         # Update project with contract address
         project.contract_address = contract_address
