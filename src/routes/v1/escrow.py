@@ -2,11 +2,11 @@
 Escrow Routes - Progressive Fund Release for Projects
 """
 from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 import json
 
-from src.core.depends.db import get_db
+from src.core.depends.db import get_async_session
 from src.models.project import SponsoredProject
 from src.schemas.project import SponsoredProjectUpdate
 from src.services.project import ProjectService
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/escrow", tags=["escrow"])
 @router.post("/deploy-escrow")
 async def deploy_escrow(
     project_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_session),
 ):
     """
     Deploy an escrow smart contract for a project with progressive fund release
@@ -34,10 +34,11 @@ async def deploy_escrow(
         dict with contract_address and deployment details
     """
     try:
-        # Get the project
-        project = db.query(SponsoredProject).filter(
-            SponsoredProject.id == project_id
-        ).first()
+        # Get the project using async query
+        from sqlalchemy import select
+        query = select(SponsoredProject).where(SponsoredProject.id == project_id)
+        result = await db.execute(query)
+        project = result.scalars().first()
         
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
@@ -88,7 +89,7 @@ async def deploy_escrow(
         # Update project with contract address
         project.contract_address = contract_address
         project.status = "approved"  # Keep as approved since contract is deployed
-        db.commit()
+        await db.commit()
         
         return {
             "success": True,
@@ -101,7 +102,7 @@ async def deploy_escrow(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=500,
             detail=f"Error deploying escrow: {str(e)}"
@@ -111,7 +112,7 @@ async def deploy_escrow(
 @router.get("/escrow-info/{project_id}")
 async def get_escrow_info(
     project_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_session),
 ):
     """
     Get information about a project's escrow contract
@@ -123,9 +124,10 @@ async def get_escrow_info(
         dict with escrow and milestone information
     """
     try:
-        project = db.query(SponsoredProject).filter(
-            SponsoredProject.id == project_id
-        ).first()
+        from sqlalchemy import select
+        query = select(SponsoredProject).where(SponsoredProject.id == project_id)
+        result = await db.execute(query)
+        project = result.scalars().first()
         
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
