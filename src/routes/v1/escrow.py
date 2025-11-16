@@ -3,13 +3,10 @@ Escrow Routes - Progressive Fund Release for Projects
 """
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
-import json
+from sqlalchemy import select
 
 from src.core.depends.db import get_async_session
-from src.models.project import SponsoredProject
-from src.schemas.project import SponsoredProjectUpdate
-from src.services.project import ProjectService
+from src.models.sponsor import SponsoredProject
 
 router = APIRouter(prefix="/escrow", tags=["escrow"])
 
